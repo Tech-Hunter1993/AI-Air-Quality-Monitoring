@@ -81,4 +81,48 @@ Integration testing should verify:
 
 ## Test Execution
 
-Test commands will be added after test files are implemented.
+### Python preprocessing tests
+
+```bash
+python -m pytest tests/
+```
+
+### Android on-device AI unit tests
+
+```bash
+cd android_app
+./gradlew testDebugUnitTest
+```
+
+`AiModelsTest.kt` (13 tests) covers: telemetry JSON parsing including `null` sensors and
+unknown protocol versions; CPCB AQI breakpoints and maximum-sub-index rule; the Hampel spike
+filter; range validation; one-minute aggregation; RLS recovering known linear coefficients;
+the forecaster beating persistence on a predictable synthetic signal and falling back to
+persistence when untrained; classifier priors separating typical source signatures;
+adaptation from labelled samples; and probability normalisation. These tests use controlled
+synthetic inputs to verify algorithm correctness. They are not performance results.
+
+### Firmware build check
+
+```bash
+arduino-cli compile --fqbn esp32:esp32:esp32 firmware/AirQualityMonitor
+```
+
+## Hardware Integration Test Record
+
+| Date | Setup | Check | Result |
+| --- | --- | --- | --- |
+| 2026-10-19 | ESP32 + MH-Z19-series CO₂, PMS7003, DHT11, MQ135; Samsung Galaxy M30s (Android 11) | Firmware v6 compiles and flashes | Pass (46 % flash, 11 % RAM) |
+| 2026-10-19 | same | App discovers, connects and streams over BLE | Pass: serial log reports `BLE: APP CONNECTED` |
+| 2026-10-19 | same | Device LEDs follow the app's AI status | Pass: serial log reports `AIR STATUS: POOR (AI app)` |
+| 2026-10-19 | same | Sensor validity with BLE active | Initially failed: intermittent false `NO DATA` (unsigned `millis()` wrap in the timeout check). Fixed in v6; 20/20 reports valid over 60 s afterwards |
+| 2026-10-19 | same | Automatic reconnection after board reset | Pass |
+| 2026-10-19 | same | MQ135 warm-up → calibration → baseline sequence | Pass |
+
+### Still to be done (Phase 8)
+
+- Record several days of data in the deployment room and export the CSV.
+- Report the forecast MAE and skill values shown in the app, with the data period.
+- Label real source events (cooking, incense, cleaning, sweeping) and evaluate the
+  classifier on held-out labelled events.
+- Co-locate with a reference monitor, if available, to quantify sensor bias.

@@ -1,14 +1,8 @@
 # Dashboard
 
-This folder is reserved for the future interactive dashboard.
+The interactive dashboard is implemented as the Android app in [`android_app/`](../android_app/README.md)
+(Dashboard, Trends, AI Insights and Device screens), because all AI processing runs on the phone.
 
-Planned contents:
-
-- Streamlit application files.
-- Dashboard components.
-- Visualization utilities.
-- Dashboard configuration.
-
-The dashboard should display documented data and validated model outputs only.
-
-No dashboard has been implemented yet.
+This folder is reserved for an optional desktop dashboard (for example Streamlit) for
+analysing CSV files exported from the app. It should display documented data and validated
+model outputs only.

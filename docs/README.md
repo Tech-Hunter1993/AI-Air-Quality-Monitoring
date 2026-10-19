@@ -13,8 +13,9 @@ This directory contains the academic and technical documentation for the AI-Base
 | `Methodology.md` | Proposed development and machine learning methodology |
 | `Dataset.md` | Dataset selection, documentation, and preprocessing plan |
 | `Data_Preprocessing.md` | CSV cleaning pipeline, validation rules, CLI usage, and Python API |
-| `Testing_Plan.md` | Planned testing strategy for data, models, dashboard, and integration |
-| `User_Guide.md` | Future setup and usage instructions |
+| `AI_Models.md` | On-device AI: preprocessing, AQI, source classifier, forecasters, anomaly detection, alerts |
+| `Testing_Plan.md` | Testing strategy, test commands and hardware integration test record |
+| `User_Guide.md` | Setup and usage of the sensor board, Android app and Python tools |
 | `Contribution_Guidelines.md` | Repository contribution and documentation practices |
 
 ## Folder-Level Documentation
@@ -31,4 +32,6 @@ Each major project folder includes a short README describing its intended use an
 
 ## Current Status
 
-The documentation is prepared for project planning and future development. Implementation details must be added as the project progresses.
+Firmware, hardware notes, the Android app with on-device AI, and their documentation are
+implemented. See also `firmware/README.md`, `hardware/README.md` and `android_app/README.md`.
+Evaluation with recorded deployment data is still pending.

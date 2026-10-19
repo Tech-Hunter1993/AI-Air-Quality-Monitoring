@@ -1,14 +1,12 @@
 # AI Model
 
-This folder is reserved for future machine learning code and model artifacts.
+- `preprocessing/`: Python pipeline for cleaning air-quality CSV files (see
+  [docs/Data_Preprocessing.md](../docs/Data_Preprocessing.md)).
 
-Planned contents:
-
-- Training scripts.
-- Evaluation scripts.
-- Model utility functions.
-- Saved model files generated from documented datasets.
+The real-time AI models (forecasting, source classification, anomaly detection, AQI) run on
+the Android phone and are implemented in Kotlin under
+`android_app/app/src/main/java/edu/saintgits/airquality/ai/`. They are documented in
+[docs/AI_Models.md](../docs/AI_Models.md). They learn online from the device's data, so no
+pre-trained model files are stored here.
 
 Do not add trained model files until the dataset, training process, and evaluation metrics are documented.
-
-No AI model has been implemented yet.

@@ -13,6 +13,45 @@ The system is planned as a modular, hardware-independent architecture for monito
 - Keep secrets and credentials outside the repository.
 - Use documented data sources and avoid fabricated results.
 
+## Implemented Architecture
+
+The implemented system uses an **edge sensor node + on-device AI** design. The ESP32 does
+no AI; the Android phone hosts the complete AI pipeline, storage and dashboard.
+
+```text
+┌───────────────────── ESP32 sensor node (firmware v6) ─────────────────────┐
+│ MH-Z19 CO₂ (UART2) · PMS7003 (UART1) · DHT11 · MQ135 (ADC) · 3 status LEDs │
+│ frame/checksum validation · MQ135 baseline · sensor timeouts              │
+│ BLE GATT server "AirQ-Monitor": telemetry (notify, JSON/2 s) + commands   │
+└─────────────────────────────────┬─────────────────────────────────────────┘
+                                  │ Bluetooth Low Energy
+┌─────────────────────────────────▼──────── Android app "AirQ AI" ──────────┐
+│ BleClient ─► MonitorRepository (single AI worker thread)                  │
+│   AiEngine: Preprocessor ─► AQI ─► SourceClassifier ─► status             │
+│             MinuteAggregator ─► Forecasters (RLS) · AnomalyDetector        │
+│   AlertEngine ─► notifications        ReadingStore (SQLite) ─► CSV export  │
+│   AI status ─► BLE command ─► device LEDs                                 │
+│ MonitorService (foreground) · Compose UI: Dashboard/Trends/Insights/Device │
+└───────────────────────────────────────────────────────────────────────────┘
+                                  │ CSV (pipeline-compatible columns)
+                                  ▼
+                 Python preprocessing (ai_model/preprocessing)
+```
+
+Design decisions:
+
+- **Why AI on the phone:** more compute and memory than the ESP32, a rich UI, persistent
+  storage and notifications, and models that can be updated without reflashing hardware.
+- **Why BLE:** works without Wi-Fi or cloud accounts and stores no credentials on the device.
+- **Why online learning:** no labelled dataset exists for this sensor set, so the models start
+  from documented priors and persistence, then learn from the deployment's own data.
+- **Graceful degradation:** without the phone the firmware falls back to local threshold LEDs.
+
+Details: [AI_Models.md](AI_Models.md), [firmware/README.md](../firmware/README.md),
+[android_app/README.md](../android_app/README.md).
+
+The sections below record the original planning architecture.
+
 ## High-Level Architecture
 
 ```text
