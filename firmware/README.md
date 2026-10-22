@@ -1,6 +1,6 @@
 # Firmware
 
-ESP32 firmware for the sensor node: `AirQualityMonitor/AirQualityMonitor.ino` (version 6.0).
+ESP32 firmware for the sensor node: `AirQualityMonitor/AirQualityMonitor.ino` (version 7.0).
 
 The ESP32 is a **sensing node only**. It reads and validates the sensors and streams raw
 measurements to the Android app over Bluetooth Low Energy. All AI/ML processing (AQI,
@@ -71,14 +71,34 @@ One JSON object every 2 s. Invalid sensors are sent as `null`, never as a fake v
 | Command | Effect |
 | --- | --- |
 | `AI:G`, `AI:M`, `AI:P` | AI air status from the app (good / moderate / poor), drives the LEDs for 20 s |
+| `AQ:<aqi>,<source>` | AQI and probable source from the app, shown on LCD page 3 (e.g. `AQ:61,Occupancy`) |
 | `RECAL` | Re-learn the MQ135 clean-air baseline (30 s). Do this in fresh air. |
+
+## 16×2 LCD (v7)
+
+HD44780 16×2 display with a PCF8574 I²C backpack (address 0x27, or 0x3F, found
+automatically), connected to SDA GPIO21 / SCL GPIO22 through a BSS138 level shifter. The
+firmware runs without it if no display answers. Pages rotate every 3 s:
+
+| Page | Line 1 | Line 2 |
+| --- | --- | --- |
+| Start-up (first 90 s) | MQ135 warm-up / baseline | countdown |
+| 1 | CO₂ and air status | PM2.5 and PM10 |
+| 2 | Temperature and humidity | gas index, BLE link |
+| 3 (app connected) | AI status, or AQI and category | probable source |
+| 4 | Uptime, firmware version | BLE link, telemetry count |
+
+An invalid sensor is shown as `--`, never as a stale value. Only changed characters are
+written, so LCD updates never delay the UART parsers. The 2S Li-ion pack only powers the
+node; the firmware does not measure battery voltage.
 
 ## Build and upload
 
 Arduino IDE 2 or `arduino-cli`:
 
 - Board: **ESP32 Dev Module** (`esp32:esp32:esp32`), ESP32 Arduino core 2.0.x
-- Libraries: **NimBLE-Arduino** 2.x, **DHT sensor library** (Adafruit) 1.4.x with Adafruit Unified Sensor
+- Libraries: **NimBLE-Arduino** 2.x, **DHT sensor library** (Adafruit) 1.4.x with Adafruit Unified Sensor,
+  **LiquidCrystal I2C** 1.1.x
 
 ```bash
 arduino-cli compile --fqbn esp32:esp32:esp32 firmware/AirQualityMonitor
@@ -91,6 +111,7 @@ Replace `COM6` with your board's serial port.
 
 | Version | Changes |
 | --- | --- |
+| 7.0 | 16×2 I²C LCD with rotating status pages (pollutants, climate and gas, AI result, system); `AQ:` command for the AQI and source page; display auto-detected at 0x27 / 0x3F. |
 | 6.0 | BLE telemetry and command channel; LEDs follow the app's AI status; MQ135 recalibration command; fixed false "NO DATA" sensor timeouts caused by unsigned `millis()` wrap when a frame arrived after the loop timestamp. |
 | 5.0 | Stand-alone monitor: CO₂, PMS7003, DHT11, MQ135, threshold LEDs, serial dashboard. |
 

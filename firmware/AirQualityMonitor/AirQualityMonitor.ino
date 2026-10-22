@@ -2,13 +2,22 @@
 #include <Arduino.h>
 #include <DHT.h>
 #include <NimBLEDevice.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
 #include <math.h>
 
 // =========================================
-// ESP32 SMART AIR QUALITY MONITOR V6.0
+// ESP32 SMART AIR QUALITY MONITOR V7.0
 // CO2 + PM + DHT11 + MQ135 + RGB STATUS
 // + BLE TELEMETRY TO ANDROID AI APP
+// + 16x2 I2C LCD STATUS PAGES
 // =========================================
+//
+// v7: the 16x2 LCD (PCF8574 backpack, 0x27 or
+// 0x3F, via BSS138 level shifter on GPIO21/22)
+// rotates status pages every 3 s. The 2S Li-ion
+// pack only powers the node; no battery data are
+// measured.
 //
 // The ESP32 is the sensing node only. It reads
 // the sensors, validates frames and streams raw
@@ -38,6 +47,9 @@
 #define LED_GREEN 4
 #define LED_ORANGE 15
 #define LED_RED 2
+
+#define LCD_SDA 21
+#define LCD_SCL 22
 
 // MQ135 voltage divider
 // AO -- 10k -- GPIO34 -- 18k -- GND
@@ -80,6 +92,11 @@ const uint32_t TELEMETRY_INTERVAL = 2000;
 // for this long. After that the LEDs fall back
 // to the local thresholds.
 const uint32_t APP_STATUS_TIMEOUT = 20000;
+
+// -------- LCD CONFIGURATION --------
+const char* FIRMWARE_VERSION = "v7.0";
+const uint32_t LCD_PAGE_INTERVAL = 3000;
+const uint32_t LCD_REFRESH_INTERVAL = 1000;
 
 // -------- SENSOR OBJECTS --------
 HardwareSerial CO2Serial(2);
@@ -167,6 +184,18 @@ volatile bool commandPending = false;
 AirState appState = STARTUP;
 uint32_t lastAppStatus = 0;
 bool appStatusReceived = false;
+
+// AQI and probable source from the app ("AQ:" command)
+int appAqi = -1;
+char appSource[12] = "";
+uint32_t lastAppAqi = 0;
+
+// -------- LCD STATE --------
+LiquidCrystal_I2C* lcd = nullptr;
+char lcdShown[2][17];       // what is on the glass now
+uint8_t lcdPage = 0;
+uint32_t lastLcdPage = 0;
+uint32_t lastLcdRefresh = 0;
 
 // =========================================
 // LED CONTROL
@@ -599,8 +628,23 @@ void restartMQCalibration() {
 
 // Commands (ASCII):
 //   AI:G / AI:M / AI:P  AI air status from app
+//   AQ:<aqi>,<source>   AQI and probable source (LCD)
 //   RECAL               restart MQ135 baseline
 void handleCommand(const char* cmd) {
+
+  if (strncmp(cmd, "AQ:", 3) == 0) {
+
+    const char* comma = strchr(cmd + 3, ',');
+    int aqi = atoi(cmd + 3);
+
+    if (comma == nullptr || aqi < 0 || aqi > 999)
+      return;
+
+    appAqi = aqi;
+    strlcpy(appSource, comma + 1, sizeof(appSource));
+    lastAppAqi = millis();
+    return;
+  }
 
   if (strncmp(cmd, "AI:", 3) == 0) {
 
@@ -729,6 +773,226 @@ const char* stateName() {
 }
 
 // =========================================
+// 16x2 I2C LCD
+// =========================================
+
+const char* shortStateName() {
+
+  switch (airState) {
+    case STARTUP: return "INIT";
+    case GOOD: return "GOOD";
+    case MODERATE: return "MOD";
+    case POOR: return "POOR";
+    case SENSOR_FAULT: return "FAULT";
+  }
+
+  return "?";
+}
+
+const char* aqiCategory(int aqi) {
+  if (aqi <= 50) return "Good";
+  if (aqi <= 100) return "Satis";
+  if (aqi <= 200) return "Moder";
+  if (aqi <= 300) return "Poor";
+  if (aqi <= 400) return "VPoor";
+  return "Severe";
+}
+
+void setupLCD() {
+
+  Wire.begin(LCD_SDA, LCD_SCL);
+  Wire.setClock(100000);
+
+  // PCF8574 backpacks use 0x27 (PCF8574T)
+  // or 0x3F (PCF8574AT).
+  const uint8_t addresses[] = { 0x27, 0x3F };
+
+  for (uint8_t addr : addresses) {
+    Wire.beginTransmission(addr);
+    if (Wire.endTransmission() == 0) {
+      lcd = new LiquidCrystal_I2C(addr, 16, 2);
+      lcd->init();
+      lcd->backlight();
+      lcd->clear();
+      memset(lcdShown, ' ', sizeof(lcdShown));
+      Serial.printf("[LCD] 16x2 found at 0x%02X\n", addr);
+      return;
+    }
+  }
+
+  Serial.println("[LCD] Not found - running without display");
+}
+
+// Compose one 16-character row: left text and
+// right-aligned text, padded with spaces.
+void lcdCompose(char* row, const char* left,
+                const char* right = "") {
+
+  memset(row, ' ', 16);
+  row[16] = '\0';
+
+  size_t nl = strnlen(left, 16);
+  memcpy(row, left, nl);
+
+  size_t nr = strnlen(right, 16);
+  if (nr > 0 && nl + 1 + nr <= 16)
+    memcpy(row + 16 - nr, right, nr);
+}
+
+// Write only the characters that changed, so a
+// refresh costs a few I2C bytes and never stalls
+// the UART parsers.
+void lcdShow(const char rows[2][17]) {
+
+  if (lcd == nullptr)
+    return;
+
+  for (uint8_t r = 0; r < 2; r++) {
+    for (uint8_t c = 0; c < 16; c++) {
+
+      if (lcdShown[r][c] == rows[r][c])
+        continue;
+
+      lcd->setCursor(c, r);
+
+      // Write the run of changed characters
+      while (c < 16 && lcdShown[r][c] != rows[r][c]) {
+        lcd->write(rows[r][c]);
+        lcdShown[r][c] = rows[r][c];
+        c++;
+      }
+    }
+  }
+}
+
+bool appAqiFresh() {
+  return appAqi >= 0 &&
+         bleConnected &&
+         millis() - lastAppAqi < APP_STATUS_TIMEOUT;
+}
+
+// Build the text of one page. An invalid sensor
+// is shown as "--", never as a stale number.
+void buildPage(uint8_t page, char rows[2][17]) {
+
+  char a[17], b[17];
+
+  switch (page) {
+
+    case 0:   // Pollutants and status
+      if (co2Valid) snprintf(a, sizeof(a), "CO2 %uppm", co2ppm);
+      else          snprintf(a, sizeof(a), "CO2 --");
+      lcdCompose(rows[0], a, shortStateName());
+
+      if (pmValid) snprintf(a, sizeof(a), "PM2.5 %u", pm25);
+      else         snprintf(a, sizeof(a), "PM --");
+      if (pmValid) snprintf(b, sizeof(b), "PM10 %u", pm10);
+      else         snprintf(b, sizeof(b), "no data");
+      lcdCompose(rows[1], a, b);
+      break;
+
+    case 1:   // Climate and gas index
+      if (dhtValid) {
+        snprintf(a, sizeof(a), "T %.1fC", temperature);
+        snprintf(b, sizeof(b), "H %.1f%%", humidity);
+      } else {
+        snprintf(a, sizeof(a), "T --");
+        snprintf(b, sizeof(b), "H --");
+      }
+      lcdCompose(rows[0], a, b);
+
+      if (mqValid && mqCalibrated)
+        snprintf(a, sizeof(a), "Gas %.2fx", mqPollutionRatio);
+      else if (mqValid)
+        snprintf(a, sizeof(a), "Gas cal");
+      else
+        snprintf(a, sizeof(a), "Gas --");
+      lcdCompose(rows[1], a, bleConnected ? "BLE:Y" : "BLE:N");
+      break;
+
+    case 2:   // AI result from the app
+      if (appAqiFresh()) {
+        snprintf(a, sizeof(a), "AQI %d %s", appAqi, aqiCategory(appAqi));
+        lcdCompose(rows[0], a, "AI");
+        snprintf(a, sizeof(a), "Src:%s", appSource);
+        lcdCompose(rows[1], a);
+      } else {
+        snprintf(a, sizeof(a), "AI status %s", shortStateName());
+        lcdCompose(rows[0], a);
+        lcdCompose(rows[1], "from phone app");
+      }
+      break;
+
+    case 3: { // System status
+      uint32_t up = millis() / 1000;
+      snprintf(a, sizeof(a), "Up %02lu:%02lu",
+               (unsigned long)(up / 3600),
+               (unsigned long)((up / 60) % 60));
+      lcdCompose(rows[0], a, FIRMWARE_VERSION);
+      snprintf(b, sizeof(b), "Seq %lu", (unsigned long)telemetrySeq);
+      lcdCompose(rows[1], bleConnected ? "BLE:Y" : "BLE:N", b);
+      break;
+    }
+
+    default: { // Start-up: MQ135 warm-up / baseline
+      uint32_t elapsed = millis() - bootTime;
+      uint32_t total = MQ_WARMUP + MQ_CALIBRATION;
+      uint32_t left = elapsed < total ? (total - elapsed) / 1000 : 0;
+      lcdCompose(rows[0], elapsed < MQ_WARMUP ? "MQ135 warm-up" : "MQ135 baseline");
+      snprintf(b, sizeof(b), "%lus", (unsigned long)left);
+      lcdCompose(rows[1], "Calibrating", b);
+      break;
+    }
+  }
+}
+
+// Page order: during the MQ135 warm-up the start-up
+// page alternates with the pollutant page. After
+// that pages 0-3 rotate; the AI page appears only
+// while the app is connected and sending status.
+uint8_t nextPage(uint8_t page) {
+
+  if (!mqCalibrated)
+    return page == 0 ? 4 : 0;
+
+  for (uint8_t i = 0; i < 4; i++) {
+    page = (page + 1) % 4;
+    if (page == 2 && !usingAppStatus() && !appAqiFresh())
+      continue;
+    return page;
+  }
+
+  return 0;
+}
+
+void updateLCD(uint32_t now) {
+
+  if (lcd == nullptr)
+    return;
+
+  // Hold the splash screen for the first page interval
+  if (now - bootTime < LCD_PAGE_INTERVAL && lastLcdRefresh == 0)
+    return;
+
+  if (now - lastLcdPage >= LCD_PAGE_INTERVAL) {
+    lastLcdPage = now;
+    lastLcdRefresh = 0;
+    lcdPage = nextPage(lcdPage);
+  }
+
+  // Keep the current page's values live
+  if (lastLcdRefresh != 0 &&
+      now - lastLcdRefresh < LCD_REFRESH_INTERVAL)
+    return;
+
+  lastLcdRefresh = now == 0 ? 1 : now;
+
+  char rows[2][17];
+  buildPage(lcdPage, rows);
+  lcdShow(rows);
+}
+
+// =========================================
 // SERIAL MONITOR DASHBOARD
 // =========================================
 
@@ -736,7 +1000,7 @@ void displayReadings() {
 
   Serial.println();
   Serial.println("====================================");
-  Serial.println("    ESP32 AIR QUALITY MONITOR V6    ");
+  Serial.println("    ESP32 AIR QUALITY MONITOR V7    ");
   Serial.println("====================================");
 
   Serial.println("[ CO2 SENSOR ]");
@@ -824,6 +1088,9 @@ void displayReadings() {
   Serial.print("BLE         : ");
   Serial.println(bleConnected ? "APP CONNECTED" : "ADVERTISING");
 
+  Serial.print("LCD         : ");
+  Serial.println(lcd != nullptr ? "OK" : "NOT FOUND");
+
   Serial.println("====================================");
 }
 
@@ -859,15 +1126,30 @@ void setup() {
   bootTime = millis();
 
   Serial.println();
-  Serial.println("ESP32 AIR QUALITY MONITOR V6.0");
+  Serial.println("ESP32 AIR QUALITY MONITOR V7.0");
   Serial.println("CO2 : GPIO16/17");
   Serial.println("PM  : GPIO32/27");
   Serial.println("DHT : GPIO23");
   Serial.println("MQ  : GPIO34");
   Serial.println("LED : G4 O15 R2");
+  Serial.println("LCD : SDA21 SCL22");
 
   Serial.println("MQ135 requires stable warm-up");
   Serial.println("Keep sensor in clean reference air");
+
+  setupLCD();
+
+  if (lcd != nullptr) {
+    lcd->setCursor(0, 0);
+    lcd->print("AirQ Monitor");
+    lcd->setCursor(0, 1);
+    lcd->print("Firmware ");
+    lcd->print(FIRMWARE_VERSION);
+    memcpy(lcdShown[0], "AirQ Monitor    ", 16);
+    memcpy(lcdShown[1], "Firmware v7.0   ", 16);
+    lastLcdPage = millis();
+    lcdPage = 0;   // nextPage() then shows the start-up page
+  }
 
   setupBLE();
 
@@ -946,6 +1228,8 @@ void loop() {
     lastTelemetry = now;
     sendTelemetry();
   }
+
+  updateLCD(now);
 
   if (now - lastDisplay >= DISPLAY_INTERVAL) {
     lastDisplay = now;
