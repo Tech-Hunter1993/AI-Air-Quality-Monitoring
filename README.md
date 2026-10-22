@@ -23,7 +23,7 @@ the probable pollution source, and alerts the user.
 
 ## Demo Video
 
-[**▶ Watch the prototype demonstration in your browser (82 s, 1080p, with voice-over)**](https://tech-hunter1993.github.io/AI-Air-Quality-Monitoring/demo/)
+[**▶ Watch the prototype demonstration in your browser (82 s, 1080p, with voice-over)**](https://github.com/user-attachments/assets/56484a32-7075-4120-9d44-70d0674ed0ff)
 · [download the MP4](media/AirQ_Prototype_Demo_VoiceOver.mp4)
 
 https://github.com/user-attachments/assets/56484a32-7075-4120-9d44-70d0674ed0ff
