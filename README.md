@@ -23,7 +23,8 @@ the probable pollution source, and alerts the user.
 
 ## Demo Video
 
-[**Watch the prototype demonstration (82 s, 1080p, with voice-over)**](media/AirQ_Prototype_Demo_VoiceOver.mp4)
+[**▶ Watch the prototype demonstration in your browser (82 s, 1080p, with voice-over)**](https://tech-hunter1993.github.io/AI-Air-Quality-Monitoring/demo/)
+· [download the MP4](media/AirQ_Prototype_Demo_VoiceOver.mp4)
 
 The annotated walkthrough shows the sensor node, the four 16×2 LCD pages (firmware v7) and
 the AirQ AI app: dashboard, trends, pollution source identification, device health,

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AirQ Prototype Demo</title>
+<meta name="description" content="Prototype demonstration of the AI-Based Smart Air Quality Monitoring and Pollution Source Prediction System.">
+<style>
+  :root { --bg: #0b1220; --panel: #111a2e; --ink: #e5e7eb; --muted: #94a3b8; --accent: #2dd4bf; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font-family: "Segoe UI", Roboto, Arial, sans-serif; line-height: 1.5; }
+  main { max-width: 1100px; margin: 0 auto; padding: 32px 16px 48px; }
+  .eyebrow { color: var(--accent); letter-spacing: 3px; text-transform: uppercase; font-size: 13px; font-weight: 600; }
+  h1 { font-size: clamp(24px, 4vw, 38px); line-height: 1.2; margin: 8px 0 6px; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  video { width: 100%; height: auto; border-radius: 12px; background: #000;
+          box-shadow: 0 0 0 1px #2dd4bf44, 0 20px 50px #0008; }
+  .row { display: flex; flex-wrap: wrap; gap: 12px; margin: 20px 0 28px; }
+  a.btn { color: #04201d; background: var(--accent); text-decoration: none; font-weight: 600;
+          padding: 10px 18px; border-radius: 8px; }
+  a.btn.ghost { color: var(--ink); background: transparent; box-shadow: inset 0 0 0 1px #334155; }
+  section { background: var(--panel); border-radius: 12px; padding: 18px 22px; }
+  section h2 { font-size: 18px; margin: 0 0 8px; }
+  ol { margin: 0; padding-left: 22px; color: #cbd5e1; }
+  footer { color: var(--muted); font-size: 14px; margin-top: 28px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">Prototype demonstration</div>
+  <h1>AI-Based Smart Air Quality Monitoring and Pollution Source Prediction System</h1>
+  <p class="sub">ESP32 sensor node · Bluetooth LE · on-device AI on Android · 16×2 LCD — 82 s, with voice-over</p>
+
+  <video controls playsinline preload="metadata">
+    <source src="../media/AirQ_Prototype_Demo_VoiceOver.mp4" type="video/mp4">
+    Your browser cannot play this video. <a href="../media/AirQ_Prototype_Demo_VoiceOver.mp4">Download it</a> instead.
+  </video>
+
+  <div class="row">
+    <a class="btn" href="https://github.com/Tech-Hunter1993/AI-Air-Quality-Monitoring">Source code on GitHub</a>
+    <a class="btn ghost" href="../media/AirQ_Prototype_Demo_VoiceOver.mp4" download>Download video (MP4, 20 MB)</a>
+  </div>
+
+  <section>
+    <h2>What the video shows</h2>
+    <ol>
+      <li>Sensor node: ESP32 with MH-Z19 CO₂, PMS7003 particles, DHT11 and MQ135, powered by a 2S Li-ion pack</li>
+      <li>LCD pages: pollutants, climate and gas index, AI status from the phone, system status</li>
+      <li>AirQ AI app: dashboard and AQI, live trends, pollution source identification (Naive Bayes)</li>
+      <li>Device and sensor health, 15/60-minute forecasts (RLS regression) and ventilation alerts</li>
+    </ol>
+  </section>
+
+  <footer>Abhirami M · Allen Thomas Alex · Femy B Varghese · Pavithra R — Saintgits College of Engineering (Autonomous)</footer>
+</main>
+</body>
+</html>
